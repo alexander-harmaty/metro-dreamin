@@ -1,4 +1,4 @@
-import React, { useContext, useState, useEffect } from 'react';
+import React, { useContext, useState } from 'react';
 import { FirebaseContext } from '/util/firebase.js';
 import { getFullSystem } from '/util/firebase.js';
 import { doc, getDoc } from 'firebase/firestore';
@@ -57,14 +57,101 @@ function formatJSON(obj) {
     ;
 }
 
-// Export system data as JSON file
-export function ExportSystemJSON({ systemId, isNew, isSaved, handleSave, onSetToast }) {
-  const firebaseContext = useContext(FirebaseContext);
-  const [prompt, setPrompt] = useState();
-  const [isModalOpen, setIsModalOpen] = useState(false);
+// Sanitize station names for KML compatibility
+function sanitizeStationName(name) {
+  // Replace ampersands with "and"
+  let sanitized = name.replace(/&/g, 'and');
+  
+  // Remove any other problematic characters (e.g., < > " ')
+  sanitized = sanitized.replace(/[<>\"']/g, '');
+  return sanitized;
+}
 
-  // Main export function
-  const exportSystemData = async () => {
+// Convert system data to KML format
+function convertToKML(system) {
+  const kmlHeader = `<?xml version="1.0" encoding="UTF-8"?>
+<kml xmlns="http://www.opengis.net/kml/2.2">
+  <Document>
+    <name>${system.title}</name>
+    <description>${system.caption}</description>
+    <Style id="icon-1899-0288D1-nodesc-normal">
+      <IconStyle>
+        <color>ffd18802</color>
+        <scale>1</scale>
+        <Icon>
+          <href>https://www.gstatic.com/mapspro/images/stock/503-wht-blank_maps.png</href>
+        </Icon>
+        <hotSpot x="32" xunits="pixels" y="64" yunits="insetPixels"/>
+      </IconStyle>
+      <LabelStyle>
+        <scale>0</scale>
+      </LabelStyle>
+      <BalloonStyle>
+        <text><![CDATA[<h3>$[name]</h3>]]></text>
+      </BalloonStyle>
+    </Style>
+    <Style id="icon-1899-0288D1-nodesc-highlight">
+      <IconStyle>
+        <color>ffd18802</color>
+        <scale>1</scale>
+        <Icon>
+          <href>https://www.gstatic.com/mapspro/images/stock/503-wht-blank_maps.png</href>
+        </Icon>
+        <hotSpot x="32" xunits="pixels" y="64" yunits="insetPixels"/>
+      </IconStyle>
+      <LabelStyle>
+        <scale>1</scale>
+      </LabelStyle>
+      <BalloonStyle>
+        <text><![CDATA[<h3>$[name]</h3>]]></text>
+      </BalloonStyle>
+    </Style>
+    <StyleMap id="icon-1899-0288D1-nodesc">
+      <Pair>
+        <key>normal</key>
+        <styleUrl>#icon-1899-0288D1-nodesc-normal</styleUrl>
+      </Pair>
+      <Pair>
+        <key>highlight</key>
+        <styleUrl>#icon-1899-0288D1-nodesc-highlight</styleUrl>
+      </Pair>
+    </StyleMap>
+    <Folder>
+      <name>Stations</name>`;
+
+  const kmlFooter = `
+    </Folder>
+  </Document>
+</kml>`;
+
+  const kmlPlacemarks = Object.values(system.map.stations)
+    .filter(station => !station.isWaypoint)
+    .map(station => {
+      const sanitizedStationName = sanitizeStationName(station.name);
+      const lng = station.lng.toFixed(7);
+      const lat = station.lat.toFixed(7);
+      return `
+      <Placemark>
+        <name>${sanitizedStationName}</name>
+        <styleUrl>#icon-1899-0288D1-nodesc</styleUrl>
+        <Point>
+          <coordinates>${lng},${lat},0</coordinates>
+        </Point>
+      </Placemark>`;
+    }).join('');
+
+  const kmlContent = kmlHeader + kmlPlacemarks + kmlFooter;
+  return kmlContent;
+}
+
+// Main component for Import and Export
+export function ImportAndExport({ systemId, isNew, isSaved, handleSave, onSetToast }) {
+  const firebaseContext = useContext(FirebaseContext);
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [prompt, setPrompt] = useState();
+
+  // Main export function for JSON
+  const exportSystemJSON = async () => {
     try {
       // Get system title and creator name
       const systemDoc = await getDoc(doc(firebaseContext.database, `systems/${systemId}`));
@@ -111,42 +198,104 @@ export function ExportSystemJSON({ systemId, isNew, isSaved, handleSave, onSetTo
     }
   };
 
-  // Button click handler
-  const handleExport = async () => {
+  // Main export function for KML
+  const exportSystemKML = async () => {
+    try {
+      // Get system title and creator name
+      const systemDoc = await getDoc(doc(firebaseContext.database, `systems/${systemId}`));
+      const systemTitle = systemDoc.data().title || 'Untitled_Map';
+      const creatorDoc = await getDoc(doc(firebaseContext.database, `users/${systemDoc.data().userId}`));
+      const creatorName = creatorDoc.data().displayName || 'Unknown_Creator';
+
+      // Get full system data and convert to KML
+      const fullSystem = await getFullSystem(systemId);
+      const kmlData = convertToKML(fullSystem);
+
+      // Create and download KML file
+      const blob = new Blob([kmlData], { type: 'application/vnd.google-earth.kml+xml' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `MetroDreamin Map '${systemTitle}' by ${creatorName}.kml`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+
+      onSetToast('Export successful!');
+    } catch (error) {
+      console.error('Error exporting system:', error);
+      onSetToast('Export failed.');
+    }
+  };
+
+  // JSON export button handler, with prompt for unsaved changes
+  const handleExportJSON = async () => {
     setIsModalOpen(false);
     if (!isNew && !isSaved) {
       setPrompt({
         message: "You have unsaved changes. Do you want to save before exporting?",
         confirmText: "Yes, save and export.",
         denyText: "No, export without my changes.",
-        confirmFunc: handleConfirmSave,
-        denyFunc: handleDenySave,
+        confirmFunc: handleConfirmSaveJSON,
+        denyFunc: handleDenySaveJSON,
       });
     } else {
-      await exportSystemData();
+      await exportSystemJSON();
     }
   };
 
-  // Handle saving before exporting
-  const handleConfirmSave = () => {
+  // KML export button handler, with prompt for unsaved changes
+  const handleExportKML = async () => {
+    setIsModalOpen(false);
+    if (!isNew && !isSaved) {
+      setPrompt({
+        message: "You have unsaved changes. Do you want to save before exporting?",
+        confirmText: "Yes, save and export.",
+        denyText: "No, export without my changes.",
+        confirmFunc: handleConfirmSaveKML,
+        denyFunc: handleDenySaveKML,
+      });
+    } else {
+      await exportSystemKML();
+    }
+  };
+
+  // Handle saving before exporting JSON
+  const handleConfirmSaveJSON = () => {
     setPrompt(null);
     handleSave(() => {
-      exportSystemData();
+      exportSystemJSON();
     });
   };
 
-  // Handle exporting without saving
-  const handleDenySave = async () => {
+  // Handle exporting JSON without saving
+  const handleDenySaveJSON = async () => {
     setPrompt(null);
-    exportSystemData();
+    exportSystemJSON();
   };
 
+  // Handle saving before exporting KML
+  const handleConfirmSaveKML = () => {
+    setPrompt(null);
+    handleSave(() => {
+      exportSystemKML();
+    });
+  };
+
+  // Handle exporting KML without saving
+  const handleDenySaveKML = async () => {
+    setPrompt(null);
+    exportSystemKML();
+  };
+
+  // Render modal content
   const renderModalContent = () => (
     <div className="ImportAndExport-content">
       <div className="ImportAndExport-buttonWrap">
         <button className="ImportAndExport-button"
-                data-tooltip-content="JSON is a commonly used data format to store and transmit data objects. It has a diverse range of uses."
-                onClick={handleExport}>
+                data-tooltip-content="JSON is a commonly used data format to store and transmit data objects. It is human-readable and easy to parse."
+                onClick={handleExportJSON}>
           <i className="fas fa-file-lines"></i>
           <span className="ImportAndExport-buttonText">Download system data as JSON {'{ , }'}</span>
         </button>
@@ -154,7 +303,7 @@ export function ExportSystemJSON({ systemId, isNew, isSaved, handleSave, onSetTo
       <div className="ImportAndExport-buttonWrap">
         <button className="ImportAndExport-button"
                 data-tooltip-content="KML is a markup format used to display geographic data in an Earth browser, such as Google Maps and Google Earth."
-                onClick={() => alert('KML export not implemented yet')}>
+                onClick={handleExportKML}>
           <i className="fas fa-file-code"></i>
           <span className="ImportAndExport-buttonText">Download system data as KML {'< / >'}</span>
         </button>
@@ -162,6 +311,7 @@ export function ExportSystemJSON({ systemId, isNew, isSaved, handleSave, onSetTo
     </div>
   );
 
+  // Render component
   return (
     <div className="ImportAndExport">
       <button className="ImportAndExport-openButton"
@@ -169,7 +319,7 @@ export function ExportSystemJSON({ systemId, isNew, isSaved, handleSave, onSetTo
               onClick={() => setIsModalOpen(true)}>
         <i className="fas fa-download"></i>
       </button>
-      
+
       {renderFadeWrap(
         prompt && (
           <Prompt
