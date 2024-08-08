@@ -4,6 +4,7 @@ import { getFullSystem } from '/util/firebase.js';
 import { doc, getDoc } from 'firebase/firestore';
 import { Prompt } from '/components/Prompt.js';
 import { renderFadeWrap } from '/util/helpers';
+import { Modal } from '/components/Modal.js';
 
 // Order properties of objects in a JSON object
 function orderProperties(obj, order) {
@@ -60,6 +61,7 @@ function formatJSON(obj) {
 export function ExportSystemJSON({ systemId, isNew, isSaved, handleSave, onSetToast }) {
   const firebaseContext = useContext(FirebaseContext);
   const [prompt, setPrompt] = useState();
+  const [isModalOpen, setIsModalOpen] = useState(false);
 
   // Main export function
   const exportSystemData = async () => {
@@ -111,6 +113,7 @@ export function ExportSystemJSON({ systemId, isNew, isSaved, handleSave, onSetTo
 
   // Button click handler
   const handleExport = async () => {
+    setIsModalOpen(false);
     if (!isNew && !isSaved) {
       setPrompt({
         message: "You have unsaved changes. Do you want to save before exporting?",
@@ -138,11 +141,32 @@ export function ExportSystemJSON({ systemId, isNew, isSaved, handleSave, onSetTo
     exportSystemData();
   };
 
+  const renderModalContent = () => (
+    <div className="ImportAndExport-content">
+      <div className="ImportAndExport-buttonWrap">
+        <button className="ImportAndExport-button"
+                data-tooltip-content="JSON is a commonly used data format to store and transmit data objects. It has a diverse range of uses."
+                onClick={handleExport}>
+          <i className="fas fa-file-lines"></i>
+          <span className="ImportAndExport-buttonText">Download system data as JSON {'{ , }'}</span>
+        </button>
+      </div>
+      <div className="ImportAndExport-buttonWrap">
+        <button className="ImportAndExport-button"
+                data-tooltip-content="KML is a markup format used to display geographic data in an Earth browser, such as Google Maps and Google Earth."
+                onClick={() => alert('KML export not implemented yet')}>
+          <i className="fas fa-file-code"></i>
+          <span className="ImportAndExport-buttonText">Download system data as KML {'< / >'}</span>
+        </button>
+      </div>
+    </div>
+  );
+
   return (
     <div className="ImportAndExport">
-      <button className="ImportAndExport-button" 
-              data-tooltip-content="Download system and map data as JSON"
-              onClick={handleExport}>
+      <button className="ImportAndExport-openButton"
+              data-tooltip-content="Import or export system data"
+              onClick={() => setIsModalOpen(true)}>
         <i className="fas fa-download"></i>
       </button>
       
@@ -158,6 +182,14 @@ export function ExportSystemJSON({ systemId, isNew, isSaved, handleSave, onSetTo
         ),
         'prompt'
       )}
+
+      <Modal 
+        baseClass='ImportAndExport'
+        open={isModalOpen}
+        heading={<div className="ImportAndExport-heading">Import and Export</div>}
+        content={renderModalContent()}
+        onClose={() => setIsModalOpen(false)}
+      />
     </div>
   );
 }
