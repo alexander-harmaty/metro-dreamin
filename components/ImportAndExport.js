@@ -7,166 +7,73 @@ import { renderFadeWrap } from '/util/helpers';
 import { Modal } from '/components/Modal.js';
 import { LINE_MODES, DEFAULT_LINE_MODE } from '/util/constants.js';
 
-// Main component for Import and Export
 export function ImportAndExport({ systemId, isNew, isSaved, handleSave, onSetToast }) {
   const firebaseContext = useContext(FirebaseContext);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [prompt, setPrompt] = useState();
 
-  // Main export function for JSON
-  const exportSystemJSON = async () => {
+  const exportSystem = async (formatFn, fileType, fileExtension, mimeType) => {
     try {
-      // Get system title and creator name
       const systemDoc = await getDoc(doc(firebaseContext.database, `systems/${systemId}`));
       const systemTitle = systemDoc.data().title || 'Untitled_Map';
       const creatorDoc = await getDoc(doc(firebaseContext.database, `users/${systemDoc.data().userId}`));
       const creatorName = creatorDoc.data().displayName || 'Unknown_Creator';
 
-      // Get full system data and order properties
       const fullSystem = await getFullSystem(systemId);
-      const orderedSystem = {
-        title: fullSystem.map.title,
-        caption: fullSystem.map.caption,
-        map: {
-          stations: orderProperties(fullSystem.map.stations, ['isWaypoint', 'name', 'grade', 'lat', 'lng']),
-          interchanges: orderProperties(fullSystem.map.interchanges, ['stationIds']),
-          lineGroups: orderProperties(fullSystem.map.lineGroups, ['label']),
-          lines: orderProperties(fullSystem.map.lines, ['name', 'color', 'mode', 'lineGroupId', 'stationIds', 'waypointOverrides'])
+      const formattedData = formatFn(fullSystem);
+
+      const blob = new Blob([formattedData], { type: mimeType });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `MetroDreamin Map '${systemTitle}' by ${creatorName}.${fileExtension}`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+
+      onSetToast('Export successful!');
+    } catch (error) {
+      console.error(`Error exporting system: ${error}`);
+      onSetToast('Export failed.');
+    }
+  };
+
+  const handleExport = async (formatFn, fileType, fileExtension, mimeType) => {
+    setIsModalOpen(false);
+    if (!isNew && !isSaved) {
+      setPrompt({
+        message: "You have unsaved changes. Do you want to save before exporting?",
+        confirmText: "Yes, save and export.",
+        denyText: "No, export without my changes.",
+        confirmFunc: () => {
+          setPrompt(null);
+          handleSave(() => exportSystem(formatFn, fileType, fileExtension, mimeType));
         },
-        meta: {
-          systemNumStr: fullSystem.meta.systemNumStr,
-          nextStationId: fullSystem.meta.nextStationId,
-          nextInterchangeId: fullSystem.meta.nextInterchangeId,
-          nextLineGroupId: fullSystem.meta.nextLineGroupId,
-          nextLineId: fullSystem.meta.nextLineId
-        }
-      };
-      const systemData = formatJSON(orderedSystem);
-
-      // Create and download JSON file
-      const blob = new Blob([systemData], { type: 'application/json' });
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = `MetroDreamin Map '${systemTitle}' by ${creatorName}.json`;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      URL.revokeObjectURL(url);
-
-      onSetToast('Export successful!');
-    } catch (error) {
-      console.error('Error exporting system:', error);
-      onSetToast('Export failed.');
-    }
-  };
-
-  // Main export function for KML
-  const exportSystemKML = async () => {
-    try {
-      // Get system title and creator name
-      const systemDoc = await getDoc(doc(firebaseContext.database, `systems/${systemId}`));
-      const systemTitle = systemDoc.data().title || 'Untitled_Map';
-      const creatorDoc = await getDoc(doc(firebaseContext.database, `users/${systemDoc.data().userId}`));
-      const creatorName = creatorDoc.data().displayName || 'Unknown_Creator';
-
-      // Get full system data and convert to KML
-      const fullSystem = await getFullSystem(systemId);
-      const kmlData = convertToKML(fullSystem);
-
-      // Create and download KML file
-      const blob = new Blob([kmlData], { type: 'application/vnd.google-earth.kml+xml' });
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = `MetroDreamin Map '${systemTitle}' by ${creatorName}.kml`;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      URL.revokeObjectURL(url);
-
-      onSetToast('Export successful!');
-    } catch (error) {
-      console.error('Error exporting system:', error);
-      onSetToast('Export failed.');
-    }
-  };
-
-  // JSON export button handler, with prompt for unsaved changes
-  const handleExportJSON = async () => {
-    setIsModalOpen(false);
-    if (!isNew && !isSaved) {
-      setPrompt({
-        message: "You have unsaved changes. Do you want to save before exporting?",
-        confirmText: "Yes, save and export.",
-        denyText: "No, export without my changes.",
-        confirmFunc: handleConfirmSaveJSON,
-        denyFunc: handleDenySaveJSON,
+        denyFunc: async () => {
+          setPrompt(null);
+          await exportSystem(formatFn, fileType, fileExtension, mimeType);
+        },
       });
     } else {
-      await exportSystemJSON();
+      await exportSystem(formatFn, fileType, fileExtension, mimeType);
     }
   };
 
-  // KML export button handler, with prompt for unsaved changes
-  const handleExportKML = async () => {
-    setIsModalOpen(false);
-    if (!isNew && !isSaved) {
-      setPrompt({
-        message: "You have unsaved changes. Do you want to save before exporting?",
-        confirmText: "Yes, save and export.",
-        denyText: "No, export without my changes.",
-        confirmFunc: handleConfirmSaveKML,
-        denyFunc: handleDenySaveKML,
-      });
-    } else {
-      await exportSystemKML();
-    }
-  };
-
-  // Handle saving before exporting JSON
-  const handleConfirmSaveJSON = () => {
-    setPrompt(null);
-    handleSave(() => {
-      exportSystemJSON();
-    });
-  };
-
-  // Handle exporting JSON without saving
-  const handleDenySaveJSON = async () => {
-    setPrompt(null);
-    exportSystemJSON();
-  };
-
-  // Handle saving before exporting KML
-  const handleConfirmSaveKML = () => {
-    setPrompt(null);
-    handleSave(() => {
-      exportSystemKML();
-    });
-  };
-
-  // Handle exporting KML without saving
-  const handleDenySaveKML = async () => {
-    setPrompt(null);
-    exportSystemKML();
-  };
-
-  // Render modal content
   const renderModalContent = () => (
     <div className="ImportAndExport-content">
       <div className="ImportAndExport-buttonWrap">
         <button className="ImportAndExport-button"
-                data-tooltip-content="JSON is a commonly used data format to store and transmit data objects. It is human-readable and easy to parse."
-                onClick={handleExportJSON}>
+                data-tooltip-content="JSON is a popular and human-readable data format to store and transmit data objects for use in a diverse range of applications."
+                onClick={() => handleExport(serializeToJSON, 'JSON', 'json', 'application/json')}>
           <i className="fas fa-file-lines"></i>
           <span className="ImportAndExport-buttonText">Download system data as JSON {'{ , }'}</span>
         </button>
       </div>
       <div className="ImportAndExport-buttonWrap">
         <button className="ImportAndExport-button"
-                data-tooltip-content="KML is a markup format for geodata in maps like Google Earth. (large maps may be too big for Google My Maps)"
-                onClick={handleExportKML}>
+                data-tooltip-content="KML is a markup format to store geodata for use in maps like Google Earth. (large maps may be too big for Google My Maps)"
+                onClick={() => handleExport(serializeToKML, 'KML', 'kml', 'application/vnd.google-earth.kml+xml')}>
           <i className="fas fa-file-code"></i>
           <span className="ImportAndExport-buttonText">Download system data as KML {'< / >'}</span>
         </button>
@@ -174,7 +81,6 @@ export function ImportAndExport({ systemId, isNew, isSaved, handleSave, onSetToa
     </div>
   );
 
-  // Render component
   return (
     <div className="ImportAndExport">
       <button className="ImportAndExport-openButton"
@@ -207,25 +113,42 @@ export function ImportAndExport({ systemId, isNew, isSaved, handleSave, onSetToa
   );
 }
 
-// Order properties of objects in a JSON object
-function orderProperties(obj, order) {
-  const orderedObj = {};
-  Object.keys(obj).forEach(key => {
-    const orderedSubObj = {};
-    order.forEach(prop => {
-      if (obj[key][prop] !== undefined) {
-        orderedSubObj[prop] = obj[key][prop];
-      }
-    });
-    orderedObj[key] = orderedSubObj;
-  });
-  return orderedObj;
-}
+function serializeToJSON(system) {
 
-// Format JSON string for readability
-function formatJSON(obj) {
+  function orderProperties(obj, order) {
+    const orderedObj = {};
+    Object.keys(obj).forEach(key => {
+      const orderedSubObj = {};
+      order.forEach(prop => {
+        if (obj[key][prop] !== undefined) {
+          orderedSubObj[prop] = obj[key][prop];
+        }
+      });
+      orderedObj[key] = orderedSubObj;
+    });
+    return orderedObj;
+  }
+
+  const orderedSystem = {
+    title: system.map.title,
+    caption: system.map.caption,
+    map: {
+      stations: orderProperties(system.map.stations, ['isWaypoint', 'name', 'grade', 'lat', 'lng']),
+      interchanges: orderProperties(system.map.interchanges, ['stationIds']),
+      lineGroups: orderProperties(system.map.lineGroups, ['label']),
+      lines: orderProperties(system.map.lines, ['name', 'color', 'mode', 'lineGroupId', 'stationIds', 'waypointOverrides'])
+    },
+    meta: {
+      systemNumStr: system.meta.systemNumStr,
+      nextStationId: system.meta.nextStationId,
+      nextInterchangeId: system.meta.nextInterchangeId,
+      nextLineGroupId: system.meta.nextLineGroupId,
+      nextLineId: system.meta.nextLineId
+    }
+  };
+
   const indentationLevel = 2; // set stringify indentation level
-  const jsonString = JSON.stringify(obj, null, indentationLevel);
+  const jsonString = JSON.stringify(orderedSystem, null, indentationLevel);
   const spc = ' '.repeat(indentationLevel); // dynamic indentation spacing
 
   return jsonString                                                             // Affected objects, properties, and elements...
@@ -258,116 +181,74 @@ function formatJSON(obj) {
     ;
 }
 
-// Encode special characters with predefined entities for KML
-function sanitizeStationName(name) {
-  if (!name) return '';
+function serializeToKML(system) {
+  
+  function sanitizeString(name) {
+    if (!name) return '';
+  
+    return name
+      .replace(/&/g, '&amp;')        // Ampersand
+      .replace(/</g, '&lt;')         // Less-than
+      .replace(/>/g, '&gt;')         // Greater-than
+      .replace(/"/g, '&quot;')       // Double quote
+      .replace(/'/g, '&apos;');      // Single quote
+  }
 
-  return name
-    .replace(/&/g, '&amp;')        // Ampersand
-    .replace(/</g, '&lt;')         // Less-than
-    .replace(/>/g, '&gt;')         // Greater-than
-    .replace(/"/g, '&quot;')       // Double quote
-    .replace(/'/g, '&apos;');      // Single quote
-}
+  const sanitizedTitle = sanitizeString(system.map.title);
+  const sanitizedDescription = sanitizeString(system.map.caption);
 
-// Convert system data to KML format
-function convertToKML(system) {
-  const sanitizedTitle = sanitizeStationName(system.map.title);
-  const sanitizedDescription = sanitizeStationName(system.map.caption);
+  const kmlHeader = generateKMLHeader(sanitizedTitle, sanitizedDescription);
+  const kmlFooter = generateKMLFooter();
+  const kmlStyles = generateKMLStyles(system);
+  const kmlStations = generateKMLStations(system);
+  const sortedKmlFolders = generateKMLFolders(system);
 
-  const kmlHeader = `<?xml version="1.0" encoding="UTF-8"?>
+  return kmlHeader + kmlStyles + kmlStations + sortedKmlFolders + kmlFooter;
+
+  function generateKMLHeader(title, description) {
+    return `<?xml version="1.0" encoding="UTF-8"?>
 <kml xmlns="http://www.opengis.net/kml/2.2">
   <Document>
-    <name>${sanitizedTitle}</name>
-    <description><![CDATA[${sanitizedDescription}]]></description>`;
+    <name>${title}</name>
+    <description><![CDATA[${description}]]></description>
+`;
+  }
 
-  const kmlFooter = `
+  function generateKMLFooter() {
+    return `
   </Document>
 </kml>`;
+  }
 
-  // Define styles for each line color
-  const kmlStyles = Object.values(system.map.lines)
-    .filter(line => line.stationIds && line.stationIds.length > 0) // Skip lines without stationIds
-    .map(line => {
-      const lineColor = line.color.slice(1); // Remove '#' from the hex color
-      const reversedColor = `ff${lineColor.slice(4, 6)}${lineColor.slice(2, 4)}${lineColor.slice(0, 2)}`; // Reverse color for KML
-      const styleId = `line-${lineColor}-10666-nodesc`;
+  function generateKMLStyles(system) {
+    return Object.values(system.map.lines)
+      .filter(line => line.stationIds && line.stationIds.length > 0) // Skip lines without stationIds
+      .map(line => {
+        const lineColor = line.color.slice(1); // Remove '#' from the hex color
+        const reversedColor = `ff${lineColor.slice(4, 6)}${lineColor.slice(2, 4)}${lineColor.slice(0, 2)}`; // Reverse color for KML
+        const styleId = `line-${lineColor}-10666-nodesc`;
 
-      return `
+        return `
     <Style id="${styleId}">
       <LineStyle>
         <color>${reversedColor}</color>
         <width>6</width>
       </LineStyle>
     </Style>`;
-    }).join('');
+      }).join('');
+  }
 
-  // Group lines by their appropriate folders
-  const linesByFolder = {};
-
-  Object.values(system.map.lines)
-    .filter(line => line.stationIds && line.stationIds.length > 0) // Skip lines without stationIds
-    .forEach(line => {
-      let folderName;
-      const lineGroup = system.map.lineGroups[line.lineGroupId];
-
-      if (lineGroup) {
-        folderName = sanitizeStationName(lineGroup.label);
-      } else if (line.mode) {
-        const mode = LINE_MODES.find(m => m.key === line.mode);
-        folderName = mode ? sanitizeStationName(mode.label) : sanitizeStationName(DEFAULT_LINE_MODE);
-      } else {
-        folderName = "Metro/rapid transit";
-      }
-
-      if (!linesByFolder[folderName]) {
-        linesByFolder[folderName] = [];
-      }
-
-      const sanitizedLineName = sanitizeStationName(line.name);
-      const lineColor = line.color.slice(1); // Remove '#' from the hex color
-      const styleUrl = `#line-${lineColor}-10666-nodesc`;
-
-      const coordinates = line.stationIds.map(stationId => {
-        const station = system.map.stations[stationId];
-        if (!station) return null;
-
-        const stationCoords = `${station.lng.toFixed(7)},${station.lat.toFixed(7)},0`;
-
-        const waypointCoords = line.waypointOverrides?.[stationId]?.map(waypoint =>
-          `${waypoint.lng.toFixed(7)},${waypoint.lat.toFixed(7)},0`
-        ) || [];
-
-        return [stationCoords, ...waypointCoords].join(' ');
-      }).filter(coord => coord !== null).join(' ');
-
-      linesByFolder[folderName].push(`
-      <Placemark>
-        <name>${sanitizedLineName}</name>
-        <styleUrl>${styleUrl}</styleUrl>
-        <LineString>
-          <coordinates>${coordinates}</coordinates>
-        </LineString>
-      </Placemark>`);
-    });
-
-  // Sort folders alphabetically, except for the Stations folder
-  const sortedKmlFolders = Object.entries(linesByFolder)
-    .sort(([a], [b]) => a.localeCompare(b))
-    .map(([folderName, placemarks]) => `
-      <Folder>
-        <name>${folderName}</name>
-        ${placemarks.sort().join('')}
-      </Folder>`).join('');
-
-  // Generate KML for stations and place it first
-  const kmlStations = Object.values(system.map.stations)
-    .filter(station => !station.isWaypoint)
-    .map(station => {
-      const sanitizedStationName = sanitizeStationName(station.name);
-      const lng = station.lng.toFixed(7);
-      const lat = station.lat.toFixed(7);
-      return `
+  function generateKMLStations(system) {
+    return `
+  <Folder>
+    <name>Stations</name>
+    ${Object.values(system.map.stations)
+      .filter(station => !station.isWaypoint)
+      .map(station => {
+        const sanitizedStationName = sanitizeString(station.name);
+        const lng = station.lng.toFixed(7);
+        const lat = station.lat.toFixed(7);
+        return `
       <Placemark>
         <name>${sanitizedStationName}</name>
         <styleUrl>#icon-1899-0288D1-nodesc</styleUrl>
@@ -375,13 +256,83 @@ function convertToKML(system) {
           <coordinates>${lng},${lat},0</coordinates>
         </Point>
       </Placemark>`;
-    }).sort().join('');
+      }).sort().join('')}
+  </Folder>`;
+  }
 
-  const kmlContent = kmlHeader + kmlStyles + `
+  function generateKMLFolders(system) {
+    const linesByFolder = organizeLinesByFolder(system);
+
+    return Object.entries(linesByFolder)
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([folderName, placemarks]) => createFolderKML(folderName, placemarks))
+      .join('');
+  }
+
+  function organizeLinesByFolder(system) {
+    const linesByFolder = {};
+
+    Object.values(system.map.lines)
+      .filter(line => line.stationIds && line.stationIds.length > 0)
+      .forEach(line => {
+        const folderName = determineFolderName(line, system);
+        if (!linesByFolder[folderName]) {
+          linesByFolder[folderName] = [];
+        }
+
+        const lineKML = createLineKML(line, system);
+        linesByFolder[folderName].push(lineKML);
+      });
+
+    return linesByFolder;
+  }
+
+  function createFolderKML(folderName, placemarks) {
+    return `
   <Folder>
-    <name>Stations</name>
-    ${kmlStations}
-  </Folder>` + sortedKmlFolders + kmlFooter;
+    <name>${folderName}</name>
+    ${placemarks.sort().join('')}
+  </Folder>`;
+  }
 
-  return kmlContent;
+  function createLineKML(line, system) {
+    const sanitizedLineName = sanitizeString(line.name);
+    const lineColor = line.color.slice(1);
+    const styleUrl = `#line-${lineColor}-10666-nodesc`;
+
+    const coordinates = line.stationIds.map(stationId => {
+      const station = system.map.stations[stationId];
+      if (!station) return null;
+
+      const stationCoords = `${station.lng.toFixed(7)},${station.lat.toFixed(7)},0`;
+
+      const waypointCoords = line.waypointOverrides?.[stationId]?.map(waypoint =>
+        `${waypoint.lng.toFixed(7)},${waypoint.lat.toFixed(7)},0`
+      ) || [];
+
+      return [stationCoords, ...waypointCoords].join(' ');
+    }).filter(coord => coord !== null).join(' ');
+
+    return `
+  <Placemark>
+    <name>${sanitizedLineName}</name>
+    <styleUrl>${styleUrl}</styleUrl>
+    <LineString>
+      <coordinates>${coordinates}</coordinates>
+    </LineString>
+  </Placemark>`;
+  }
+
+  function determineFolderName(line, system) {
+    const lineGroup = system.map.lineGroups[line.lineGroupId];
+
+    if (lineGroup) {
+      return sanitizeString(lineGroup.label);
+    } else if (line.mode) {
+      const mode = LINE_MODES.find(m => m.key === line.mode);
+      return mode ? sanitizeString(mode.label) : sanitizeString(DEFAULT_LINE_MODE);
+    } else {
+      return "Metro/rapid transit";
+    }
+  }
 }
