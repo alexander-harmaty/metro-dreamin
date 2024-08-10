@@ -5,6 +5,7 @@ import { doc, getDoc } from 'firebase/firestore';
 import { Prompt } from '/components/Prompt.js';
 import { renderFadeWrap } from '/util/helpers';
 import { Modal } from '/components/Modal.js';
+import { LINE_MODES, DEFAULT_LINE_MODE } from '/util/constants.js';
 
 // Order properties of objects in a JSON object
 function orderProperties(obj, order) {
@@ -57,74 +58,108 @@ function formatJSON(obj) {
     ;
 }
 
-// Sanitize station names for KML compatibility
 function sanitizeStationName(name) {
-  // Replace ampersands with "and"
-  let sanitized = name.replace(/&/g, 'and');
-  
-  // Remove any other problematic characters (e.g., < > " ')
-  sanitized = sanitized.replace(/[<>\"']/g, '');
-  return sanitized;
+  if (!name) return '';
+
+  return name
+    .replace(/&/g, '&amp;')        // Ampersand
+    .replace(/</g, '&lt;')         // Less-than
+    .replace(/>/g, '&gt;')         // Greater-than
+    .replace(/"/g, '&quot;')       // Double quote
+    .replace(/'/g, '&apos;');      // Single quote
 }
 
 // Convert system data to KML format
 function convertToKML(system) {
+  const sanitizedTitle = sanitizeStationName(system.map.title);
+  const sanitizedDescription = sanitizeStationName(system.map.caption);
+
   const kmlHeader = `<?xml version="1.0" encoding="UTF-8"?>
 <kml xmlns="http://www.opengis.net/kml/2.2">
   <Document>
-    <name>${system.title}</name>
-    <description>${system.caption}</description>
-    <Style id="icon-1899-0288D1-nodesc-normal">
-      <IconStyle>
-        <color>ffd18802</color>
-        <scale>1</scale>
-        <Icon>
-          <href>https://www.gstatic.com/mapspro/images/stock/503-wht-blank_maps.png</href>
-        </Icon>
-        <hotSpot x="32" xunits="pixels" y="64" yunits="insetPixels"/>
-      </IconStyle>
-      <LabelStyle>
-        <scale>0</scale>
-      </LabelStyle>
-      <BalloonStyle>
-        <text><![CDATA[<h3>$[name]</h3>]]></text>
-      </BalloonStyle>
-    </Style>
-    <Style id="icon-1899-0288D1-nodesc-highlight">
-      <IconStyle>
-        <color>ffd18802</color>
-        <scale>1</scale>
-        <Icon>
-          <href>https://www.gstatic.com/mapspro/images/stock/503-wht-blank_maps.png</href>
-        </Icon>
-        <hotSpot x="32" xunits="pixels" y="64" yunits="insetPixels"/>
-      </IconStyle>
-      <LabelStyle>
-        <scale>1</scale>
-      </LabelStyle>
-      <BalloonStyle>
-        <text><![CDATA[<h3>$[name]</h3>]]></text>
-      </BalloonStyle>
-    </Style>
-    <StyleMap id="icon-1899-0288D1-nodesc">
-      <Pair>
-        <key>normal</key>
-        <styleUrl>#icon-1899-0288D1-nodesc-normal</styleUrl>
-      </Pair>
-      <Pair>
-        <key>highlight</key>
-        <styleUrl>#icon-1899-0288D1-nodesc-highlight</styleUrl>
-      </Pair>
-    </StyleMap>
-    <Folder>
-      <name>Stations</name>`;
+    <name>${sanitizedTitle}</name>
+    <description><![CDATA[${sanitizedDescription}]]></description>`;
 
   const kmlFooter = `
-    </Folder>
   </Document>
 </kml>`;
 
-  const kmlPlacemarks = Object.values(system.map.stations)
+  // Define styles for each line color
+  const kmlStyles = Object.values(system.map.lines)
+    .filter(line => line.stationIds && line.stationIds.length > 0) // Skip lines without stationIds
+    .map(line => {
+      const lineColor = line.color.slice(1); // Remove '#' from the hex color
+      const reversedColor = `ff${lineColor.slice(4, 6)}${lineColor.slice(2, 4)}${lineColor.slice(0, 2)}`; // Reverse color for KML
+      const styleId = `line-${lineColor}-5000-nodesc`;
+
+      return `
+    <Style id="${styleId}">
+      <LineStyle>
+        <color>${reversedColor}</color>
+        <width>4</width>
+      </LineStyle>
+    </Style>`;
+    }).join('');
+
+  // Group lines by their appropriate folders
+  const linesByFolder = {};
+
+  Object.values(system.map.lines)
+    .filter(line => line.stationIds && line.stationIds.length > 0) // Skip lines without stationIds
+    .forEach(line => {
+      let folderName;
+      const lineGroup = system.map.lineGroups[line.lineGroupId];
+
+      if (lineGroup) {
+        folderName = sanitizeStationName(lineGroup.label);
+      } else if (line.mode) {
+        const mode = LINE_MODES.find(m => m.key === line.mode);
+        folderName = mode ? sanitizeStationName(mode.label) : sanitizeStationName(DEFAULT_LINE_MODE);
+      } else {
+        folderName = "Metro/rapid transit";
+      }
+
+      if (!linesByFolder[folderName]) {
+        linesByFolder[folderName] = [];
+      }
+
+      const sanitizedLineName = sanitizeStationName(line.name);
+      const lineColor = line.color.slice(1); // Remove '#' from the hex color
+      const styleUrl = `#line-${lineColor}-5000-nodesc`;
+
+      const coordinates = line.stationIds.map(stationId => {
+        const station = system.map.stations[stationId];
+        if (!station) return null;
+
+        const stationCoords = `${station.lng.toFixed(7)},${station.lat.toFixed(7)},0`;
+
+        const waypointCoords = line.waypointOverrides?.[stationId]?.map(waypoint =>
+          `${waypoint.lng.toFixed(7)},${waypoint.lat.toFixed(7)},0`
+        ) || [];
+
+        return [stationCoords, ...waypointCoords].join(' ');
+      }).filter(coord => coord !== null).join(' ');
+
+      linesByFolder[folderName].push(`
+      <Placemark>
+        <name>${sanitizedLineName}</name>
+        <styleUrl>${styleUrl}</styleUrl>
+        <LineString>
+          <coordinates>${coordinates}</coordinates>
+        </LineString>
+      </Placemark>`);
+    });
+
+  // Sort folders alphabetically, except for the Stations folder
+  const sortedKmlFolders = Object.entries(linesByFolder)
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([folderName, placemarks]) => `
+      <Folder>
+        <name>${folderName}</name>
+        ${placemarks.sort().join('')}
+      </Folder>`).join('');
+
+  const kmlStations = Object.values(system.map.stations)
     .filter(station => !station.isWaypoint)
     .map(station => {
       const sanitizedStationName = sanitizeStationName(station.name);
@@ -138,9 +173,14 @@ function convertToKML(system) {
           <coordinates>${lng},${lat},0</coordinates>
         </Point>
       </Placemark>`;
-    }).join('');
+    }).sort().join('');
 
-  const kmlContent = kmlHeader + kmlPlacemarks + kmlFooter;
+  const kmlContent = kmlHeader + kmlStyles + sortedKmlFolders + `
+  <Folder>
+    <name>Stations</name>
+    ${kmlStations}
+  </Folder>` + kmlFooter;
+
   return kmlContent;
 }
 
