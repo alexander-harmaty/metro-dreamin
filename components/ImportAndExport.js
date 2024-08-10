@@ -7,183 +7,6 @@ import { renderFadeWrap } from '/util/helpers';
 import { Modal } from '/components/Modal.js';
 import { LINE_MODES, DEFAULT_LINE_MODE } from '/util/constants.js';
 
-// Order properties of objects in a JSON object
-function orderProperties(obj, order) {
-  const orderedObj = {};
-  Object.keys(obj).forEach(key => {
-    const orderedSubObj = {};
-    order.forEach(prop => {
-      if (obj[key][prop] !== undefined) {
-        orderedSubObj[prop] = obj[key][prop];
-      }
-    });
-    orderedObj[key] = orderedSubObj;
-  });
-  return orderedObj;
-}
-
-// Format JSON string for readability
-function formatJSON(obj) {
-  const indentationLevel = 2; // set stringify indentation level
-  const jsonString = JSON.stringify(obj, null, indentationLevel);
-  const spc = ' '.repeat(indentationLevel); // dynamic indentation spacing
-
-  return jsonString                                                             // Affected objects, properties, and elements...
-    // Remove newlines at the opening of objects and arrays
-    .replace(/\{\n\s+"name"/g, '{ "name"')                                      // stations and lines
-    .replace(/\{\n\s+"isWaypoint"/g, '{ "isWaypoint"')                          // stations
-    .replace(/\{\n\s+"stationIds"/g, '{ "stationIds"')                          // interchanges and lines
-    .replace(/\{\n\s+"label"/g, '{ "label"')                                    // linegroups
-    .replace(/\[\n\s+"/g, '[ "')                                                // stationIds and waypointOverrides
-
-    // Remove newlines between object properties and array elements
-    .replace(/",\n\s+"/g, '", "')                                               // most properties and elements
-    .replace(/,\n\s+"grade"/g, ', "grade"')                                     // stations
-    .replace(/,\n\s+"lat"/g, ', "lat"')                                         // stations
-    .replace(/,\n\s+"lng"/g, ', "lng"')                                         // stations
-    .replace(/"\n\s+\],\n\s+"waypointOverrides"/g, '" ], "waypointOverrides"')  // lines
-
-    // Remove newlines at the closing of objects and arrays
-    .replace(/\n\s+\},/g, ' },')                                                // succeeded objects
-    .replace(/\n\s+\}\s+\},/g, ` }\n${spc}${spc}},`)                            // last objects
-    .replace(/\n\s+\]\s+\},/g, ' ] },')                                         // succeeded arrays         
-    .replace(/\n\s+\]\s+\}/g, ' ] }')                                           // last arrays
-    .replace(/\[\]\n\s+\}/g, '[] }')                                            // empty arrays
-
-    // Correct unintended changes
-    .replace('", "caption"', `",\n${spc}"caption"`)   // Fix caption property
-    .replace('", "map"', `",\n${spc}"map"`)           // Fix map property
-    .replace(/\}\n\s+\},\n\s+"meta"/, 
-      `\n${spc}${spc}}\n${spc}},\n${spc}"meta"`)      // Fix meta property
-    ;
-}
-
-function sanitizeStationName(name) {
-  if (!name) return '';
-
-  return name
-    .replace(/&/g, '&amp;')        // Ampersand
-    .replace(/</g, '&lt;')         // Less-than
-    .replace(/>/g, '&gt;')         // Greater-than
-    .replace(/"/g, '&quot;')       // Double quote
-    .replace(/'/g, '&apos;');      // Single quote
-}
-
-// Convert system data to KML format
-function convertToKML(system) {
-  const sanitizedTitle = sanitizeStationName(system.map.title);
-  const sanitizedDescription = sanitizeStationName(system.map.caption);
-
-  const kmlHeader = `<?xml version="1.0" encoding="UTF-8"?>
-<kml xmlns="http://www.opengis.net/kml/2.2">
-  <Document>
-    <name>${sanitizedTitle}</name>
-    <description><![CDATA[${sanitizedDescription}]]></description>`;
-
-  const kmlFooter = `
-  </Document>
-</kml>`;
-
-  // Define styles for each line color
-  const kmlStyles = Object.values(system.map.lines)
-    .filter(line => line.stationIds && line.stationIds.length > 0) // Skip lines without stationIds
-    .map(line => {
-      const lineColor = line.color.slice(1); // Remove '#' from the hex color
-      const reversedColor = `ff${lineColor.slice(4, 6)}${lineColor.slice(2, 4)}${lineColor.slice(0, 2)}`; // Reverse color for KML
-      const styleId = `line-${lineColor}-5000-nodesc`;
-
-      return `
-    <Style id="${styleId}">
-      <LineStyle>
-        <color>${reversedColor}</color>
-        <width>4</width>
-      </LineStyle>
-    </Style>`;
-    }).join('');
-
-  // Group lines by their appropriate folders
-  const linesByFolder = {};
-
-  Object.values(system.map.lines)
-    .filter(line => line.stationIds && line.stationIds.length > 0) // Skip lines without stationIds
-    .forEach(line => {
-      let folderName;
-      const lineGroup = system.map.lineGroups[line.lineGroupId];
-
-      if (lineGroup) {
-        folderName = sanitizeStationName(lineGroup.label);
-      } else if (line.mode) {
-        const mode = LINE_MODES.find(m => m.key === line.mode);
-        folderName = mode ? sanitizeStationName(mode.label) : sanitizeStationName(DEFAULT_LINE_MODE);
-      } else {
-        folderName = "Metro/rapid transit";
-      }
-
-      if (!linesByFolder[folderName]) {
-        linesByFolder[folderName] = [];
-      }
-
-      const sanitizedLineName = sanitizeStationName(line.name);
-      const lineColor = line.color.slice(1); // Remove '#' from the hex color
-      const styleUrl = `#line-${lineColor}-5000-nodesc`;
-
-      const coordinates = line.stationIds.map(stationId => {
-        const station = system.map.stations[stationId];
-        if (!station) return null;
-
-        const stationCoords = `${station.lng.toFixed(7)},${station.lat.toFixed(7)},0`;
-
-        const waypointCoords = line.waypointOverrides?.[stationId]?.map(waypoint =>
-          `${waypoint.lng.toFixed(7)},${waypoint.lat.toFixed(7)},0`
-        ) || [];
-
-        return [stationCoords, ...waypointCoords].join(' ');
-      }).filter(coord => coord !== null).join(' ');
-
-      linesByFolder[folderName].push(`
-      <Placemark>
-        <name>${sanitizedLineName}</name>
-        <styleUrl>${styleUrl}</styleUrl>
-        <LineString>
-          <coordinates>${coordinates}</coordinates>
-        </LineString>
-      </Placemark>`);
-    });
-
-  // Sort folders alphabetically, except for the Stations folder
-  const sortedKmlFolders = Object.entries(linesByFolder)
-    .sort(([a], [b]) => a.localeCompare(b))
-    .map(([folderName, placemarks]) => `
-      <Folder>
-        <name>${folderName}</name>
-        ${placemarks.sort().join('')}
-      </Folder>`).join('');
-
-  const kmlStations = Object.values(system.map.stations)
-    .filter(station => !station.isWaypoint)
-    .map(station => {
-      const sanitizedStationName = sanitizeStationName(station.name);
-      const lng = station.lng.toFixed(7);
-      const lat = station.lat.toFixed(7);
-      return `
-      <Placemark>
-        <name>${sanitizedStationName}</name>
-        <styleUrl>#icon-1899-0288D1-nodesc</styleUrl>
-        <Point>
-          <coordinates>${lng},${lat},0</coordinates>
-        </Point>
-      </Placemark>`;
-    }).sort().join('');
-
-  const kmlContent = kmlHeader + kmlStyles + sortedKmlFolders + `
-  <Folder>
-    <name>Stations</name>
-    ${kmlStations}
-  </Folder>` + kmlFooter;
-
-  return kmlContent;
-}
-
 // Main component for Import and Export
 export function ImportAndExport({ systemId, isNew, isSaved, handleSave, onSetToast }) {
   const firebaseContext = useContext(FirebaseContext);
@@ -342,7 +165,7 @@ export function ImportAndExport({ systemId, isNew, isSaved, handleSave, onSetToa
       </div>
       <div className="ImportAndExport-buttonWrap">
         <button className="ImportAndExport-button"
-                data-tooltip-content="KML is a markup format used to display geographic data in an Earth browser, such as Google Maps and Google Earth."
+                data-tooltip-content="KML is a markup format for geodata in maps like Google Earth. (large maps may be too big for Google My Maps)"
                 onClick={handleExportKML}>
           <i className="fas fa-file-code"></i>
           <span className="ImportAndExport-buttonText">Download system data as KML {'< / >'}</span>
@@ -382,4 +205,183 @@ export function ImportAndExport({ systemId, isNew, isSaved, handleSave, onSetToa
       />
     </div>
   );
+}
+
+// Order properties of objects in a JSON object
+function orderProperties(obj, order) {
+  const orderedObj = {};
+  Object.keys(obj).forEach(key => {
+    const orderedSubObj = {};
+    order.forEach(prop => {
+      if (obj[key][prop] !== undefined) {
+        orderedSubObj[prop] = obj[key][prop];
+      }
+    });
+    orderedObj[key] = orderedSubObj;
+  });
+  return orderedObj;
+}
+
+// Format JSON string for readability
+function formatJSON(obj) {
+  const indentationLevel = 2; // set stringify indentation level
+  const jsonString = JSON.stringify(obj, null, indentationLevel);
+  const spc = ' '.repeat(indentationLevel); // dynamic indentation spacing
+
+  return jsonString                                                             // Affected objects, properties, and elements...
+    // Remove newlines at the opening of objects and arrays
+    .replace(/\{\n\s+"name"/g, '{ "name"')                                      // stations and lines
+    .replace(/\{\n\s+"isWaypoint"/g, '{ "isWaypoint"')                          // stations
+    .replace(/\{\n\s+"stationIds"/g, '{ "stationIds"')                          // interchanges and lines
+    .replace(/\{\n\s+"label"/g, '{ "label"')                                    // linegroups
+    .replace(/\[\n\s+"/g, '[ "')                                                // stationIds and waypointOverrides
+
+    // Remove newlines between object properties and array elements
+    .replace(/",\n\s+"/g, '", "')                                               // most properties and elements
+    .replace(/,\n\s+"grade"/g, ', "grade"')                                     // stations
+    .replace(/,\n\s+"lat"/g, ', "lat"')                                         // stations
+    .replace(/,\n\s+"lng"/g, ', "lng"')                                         // stations
+    .replace(/"\n\s+\],\n\s+"waypointOverrides"/g, '" ], "waypointOverrides"')  // lines
+
+    // Remove newlines at the closing of objects and arrays
+    .replace(/\n\s+\},/g, ' },')                                                // succeeded objects
+    .replace(/\n\s+\}\s+\},/g, ` }\n${spc}${spc}},`)                            // last objects
+    .replace(/\n\s+\]\s+\},/g, ' ] },')                                         // succeeded arrays         
+    .replace(/\n\s+\]\s+\}/g, ' ] }')                                           // last arrays
+    .replace(/\[\]\n\s+\}/g, '[] }')                                            // empty arrays
+
+    // Correct unintended changes
+    .replace('", "caption"', `",\n${spc}"caption"`)   // Fix caption property
+    .replace('", "map"', `",\n${spc}"map"`)           // Fix map property
+    .replace(/\}\n\s+\},\n\s+"meta"/, 
+      `\n${spc}${spc}}\n${spc}},\n${spc}"meta"`)      // Fix meta property
+    ;
+}
+
+// Encode special characters with predefined entities for KML
+function sanitizeStationName(name) {
+  if (!name) return '';
+
+  return name
+    .replace(/&/g, '&amp;')        // Ampersand
+    .replace(/</g, '&lt;')         // Less-than
+    .replace(/>/g, '&gt;')         // Greater-than
+    .replace(/"/g, '&quot;')       // Double quote
+    .replace(/'/g, '&apos;');      // Single quote
+}
+
+// Convert system data to KML format
+function convertToKML(system) {
+  const sanitizedTitle = sanitizeStationName(system.map.title);
+  const sanitizedDescription = sanitizeStationName(system.map.caption);
+
+  const kmlHeader = `<?xml version="1.0" encoding="UTF-8"?>
+<kml xmlns="http://www.opengis.net/kml/2.2">
+  <Document>
+    <name>${sanitizedTitle}</name>
+    <description><![CDATA[${sanitizedDescription}]]></description>`;
+
+  const kmlFooter = `
+  </Document>
+</kml>`;
+
+  // Define styles for each line color
+  const kmlStyles = Object.values(system.map.lines)
+    .filter(line => line.stationIds && line.stationIds.length > 0) // Skip lines without stationIds
+    .map(line => {
+      const lineColor = line.color.slice(1); // Remove '#' from the hex color
+      const reversedColor = `ff${lineColor.slice(4, 6)}${lineColor.slice(2, 4)}${lineColor.slice(0, 2)}`; // Reverse color for KML
+      const styleId = `line-${lineColor}-10666-nodesc`;
+
+      return `
+    <Style id="${styleId}">
+      <LineStyle>
+        <color>${reversedColor}</color>
+        <width>6</width>
+      </LineStyle>
+    </Style>`;
+    }).join('');
+
+  // Group lines by their appropriate folders
+  const linesByFolder = {};
+
+  Object.values(system.map.lines)
+    .filter(line => line.stationIds && line.stationIds.length > 0) // Skip lines without stationIds
+    .forEach(line => {
+      let folderName;
+      const lineGroup = system.map.lineGroups[line.lineGroupId];
+
+      if (lineGroup) {
+        folderName = sanitizeStationName(lineGroup.label);
+      } else if (line.mode) {
+        const mode = LINE_MODES.find(m => m.key === line.mode);
+        folderName = mode ? sanitizeStationName(mode.label) : sanitizeStationName(DEFAULT_LINE_MODE);
+      } else {
+        folderName = "Metro/rapid transit";
+      }
+
+      if (!linesByFolder[folderName]) {
+        linesByFolder[folderName] = [];
+      }
+
+      const sanitizedLineName = sanitizeStationName(line.name);
+      const lineColor = line.color.slice(1); // Remove '#' from the hex color
+      const styleUrl = `#line-${lineColor}-10666-nodesc`;
+
+      const coordinates = line.stationIds.map(stationId => {
+        const station = system.map.stations[stationId];
+        if (!station) return null;
+
+        const stationCoords = `${station.lng.toFixed(7)},${station.lat.toFixed(7)},0`;
+
+        const waypointCoords = line.waypointOverrides?.[stationId]?.map(waypoint =>
+          `${waypoint.lng.toFixed(7)},${waypoint.lat.toFixed(7)},0`
+        ) || [];
+
+        return [stationCoords, ...waypointCoords].join(' ');
+      }).filter(coord => coord !== null).join(' ');
+
+      linesByFolder[folderName].push(`
+      <Placemark>
+        <name>${sanitizedLineName}</name>
+        <styleUrl>${styleUrl}</styleUrl>
+        <LineString>
+          <coordinates>${coordinates}</coordinates>
+        </LineString>
+      </Placemark>`);
+    });
+
+  // Sort folders alphabetically, except for the Stations folder
+  const sortedKmlFolders = Object.entries(linesByFolder)
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([folderName, placemarks]) => `
+      <Folder>
+        <name>${folderName}</name>
+        ${placemarks.sort().join('')}
+      </Folder>`).join('');
+
+  // Generate KML for stations and place it first
+  const kmlStations = Object.values(system.map.stations)
+    .filter(station => !station.isWaypoint)
+    .map(station => {
+      const sanitizedStationName = sanitizeStationName(station.name);
+      const lng = station.lng.toFixed(7);
+      const lat = station.lat.toFixed(7);
+      return `
+      <Placemark>
+        <name>${sanitizedStationName}</name>
+        <styleUrl>#icon-1899-0288D1-nodesc</styleUrl>
+        <Point>
+          <coordinates>${lng},${lat},0</coordinates>
+        </Point>
+      </Placemark>`;
+    }).sort().join('');
+
+  const kmlContent = kmlHeader + kmlStyles + `
+  <Folder>
+    <name>Stations</name>
+    ${kmlStations}
+  </Folder>` + sortedKmlFolders + kmlFooter;
+
+  return kmlContent;
 }
