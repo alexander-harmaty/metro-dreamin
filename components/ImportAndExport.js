@@ -1,4 +1,4 @@
-import React, { useContext, useState } from 'react';
+import React, { useContext, useState, useEffect } from 'react';
 import { FirebaseContext } from '/util/firebase.js';
 import { getFullSystem } from '/util/firebase.js';
 import { doc, getDoc } from 'firebase/firestore';
@@ -11,14 +11,25 @@ export function ImportAndExport({ systemId, isNew, isSaved, handleSave, onSetToa
   const firebaseContext = useContext(FirebaseContext);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [prompt, setPrompt] = useState();
+  const [fileName, setFileName] = useState('');
+  const [defaultFileName, setDefaultFileName] = useState('');
+  const [fileType, setFileType] = useState('json');
 
-  const exportSystem = async (formatFn, fileType, fileExtension, mimeType) => {
-    try {
+  useEffect(() => {
+    async function fetchSystemData() {
       const systemDoc = await getDoc(doc(firebaseContext.database, `systems/${systemId}`));
       const systemTitle = systemDoc.data().title || 'Untitled_Map';
       const creatorDoc = await getDoc(doc(firebaseContext.database, `users/${systemDoc.data().userId}`));
       const creatorName = creatorDoc.data().displayName || 'Unknown_Creator';
+      const defaultName = `MetroDreamin Map '${systemTitle}' by ${creatorName}`;
+      setFileName(defaultName);
+      setDefaultFileName(defaultName);
+    }
+    fetchSystemData();
+  }, [systemId, firebaseContext.database]);
 
+  const exportSystem = async (formatFn, fileType, fileExtension, mimeType) => {
+    try {
       const fullSystem = await getFullSystem(systemId);
       const formattedData = formatFn(fullSystem);
 
@@ -26,7 +37,7 @@ export function ImportAndExport({ systemId, isNew, isSaved, handleSave, onSetToa
       const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
-      link.download = `MetroDreamin Map '${systemTitle}' by ${creatorName}.${fileExtension}`;
+      link.download = `${fileName.trim() || defaultFileName}.${fileExtension}`;
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
@@ -39,7 +50,11 @@ export function ImportAndExport({ systemId, isNew, isSaved, handleSave, onSetToa
     }
   };
 
-  const handleExport = async (formatFn, fileType, fileExtension, mimeType) => {
+  const handleExport = async () => {
+    const formatFn = fileType === 'json' ? serializeToJSON : serializeToKML;
+    const fileExtension = fileType === 'json' ? 'json' : 'kml';
+    const mimeType = fileType === 'json' ? 'application/json' : 'application/vnd.google-earth.kml+xml';
+
     setIsModalOpen(false);
     if (!isNew && !isSaved) {
       setPrompt({
@@ -60,22 +75,57 @@ export function ImportAndExport({ systemId, isNew, isSaved, handleSave, onSetToa
     }
   };
 
+  const handleFileTypeChange = (type) => {
+    setFileType(type);
+  };
+
   const renderModalContent = () => (
     <div className="ImportAndExport-content">
-      <div className="ImportAndExport-buttonWrap">
-        <button className="ImportAndExport-button"
-                data-tooltip-content="JSON is a popular and human-readable data format to store and transmit data objects for use in a diverse range of applications."
-                onClick={() => handleExport(serializeToJSON, 'JSON', 'json', 'application/json')}>
-          <i className="fas fa-file-lines"></i>
-          <span className="ImportAndExport-buttonText">Download system data as JSON {'{ , }'}</span>
-        </button>
+      <label className="ImportAndExport-label">Filename and Format</label>
+      <div className="ImportAndExport-inputWrap">
+        <form className="ImportAndExport-inputForm">
+          <input
+            className="ImportAndExport-filenameInput"
+            value={fileName}
+            placeholder="Enter a filename..."
+            onChange={(e) => setFileName(e.target.value)}
+          />
+          <i className="fas fa-pen ImportAndExport-penIcon"></i>
+        </form>
+        <div className="ImportAndExport-fileType">
+          <label
+            data-tooltip-content="For use in MetroDreamin', and a diverse range of applications."
+            onMouseEnter={(e) => e.currentTarget.classList.add('hover')}
+            onMouseLeave={(e) => e.currentTarget.classList.remove('hover')}
+            onClick={() => handleFileTypeChange('json')}
+          >
+            <input
+              type="radio"
+              value="json"
+              checked={fileType === 'json'}
+              onChange={() => {}}
+            />
+            <i className={fileType === 'json' ? 'fa-solid fa-circle-dot' : 'fa-regular fa-circle'}></i> <span>JSON</span>
+          </label>
+          <label
+            data-tooltip-content="For use in map browsers, like Google Earth. (Large systems may be too big for Google My Maps)"
+            onMouseEnter={(e) => e.currentTarget.classList.add('hover')}
+            onMouseLeave={(e) => e.currentTarget.classList.remove('hover')}
+            onClick={() => handleFileTypeChange('kml')}
+          >
+            <input
+              type="radio"
+              value="kml"
+              checked={fileType === 'kml'}
+              onChange={() => {}}
+            />
+            <i className={fileType === 'kml' ? 'fa-solid fa-circle-dot' : 'fa-regular fa-circle'}></i> <span>KML</span>
+          </label>
+        </div>
       </div>
       <div className="ImportAndExport-buttonWrap">
-        <button className="ImportAndExport-button"
-                data-tooltip-content="KML is a markup format to store geodata for use in maps like Google Earth. (large maps may be too big for Google My Maps)"
-                onClick={() => handleExport(serializeToKML, 'KML', 'kml', 'application/vnd.google-earth.kml+xml')}>
-          <i className="fas fa-file-code"></i>
-          <span className="ImportAndExport-buttonText">Download system data as KML {'< / >'}</span>
+        <button className="ImportAndExport-exportButton Button--primary" onClick={handleExport}>
+          Export
         </button>
       </div>
     </div>

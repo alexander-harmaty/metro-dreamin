@@ -25,12 +25,6 @@
     }
   }
 
-  &-buttonWrap {
-    &:not(:first-child) {
-      margin-top: $gutter-mini;
-    }
-  }
-
   &-openButton {
     display: flex;
     align-items: center;
@@ -46,28 +40,103 @@
     }
   }
 
+  &-buttonWrap {
+    display: flex;
+    justify-content: flex-end;
+    margin-top: $gutter-mini;
+  }
+
+  &-exportButton {
+    @extend .Button--primary;
+    margin-top: $gutter;
+  }
+
+  &-label {
+    font-size: 16px;
+    font-weight: 400;
+    margin-bottom: $gutter-mini;
+  }
+
+  &-inputWrap {
+    display: flex;
+    align-items: center;
+    justify-content: flex-start;
+    gap: $gutter;
+    position: relative;
+  }
+
+  &-inputForm {
+    position: relative;
+    width: 100%;
+  }
+
+  &-filenameInput {
+    @include color(further);
+    @include color(opp, border-bottom-color);
+    font-family: inherit;
+    font-size: 16px;
+    overflow: auto;
+    outline: none;
+    box-shadow: none;
+    resize: none;
+    background-color: transparent;
+    flex-grow: 1;
+    padding: 5px $gutter/4;
+    padding-right: 35px;
+    border: $border-default;
+    border-color: transparent;
+    transition: $transition-fast all;
+
+    &:hover,
+    &:focus {
+      @include color(opp, border-color);
+      border-radius: $gutter/2;
+      outline: none;
+    }
+
+    &::placeholder {
+      font-weight: 500;
+    }
+  }
+
+  &-penIcon {
+    @include color(opp);
+    pointer-events: none;
+    position: absolute;
+    right: $gutter/2;
+    top: 50%;
+    transform: translateY(-50%);
+  }
+
+  &-fileType {
+    display: flex;
+    align-items: center;
+    gap: $gutter-mini;
+
+    label {
+      display: flex;
+      align-items: center;
+      font-size: 16px;
+      transition: $transition-fast all;
+
+      input {
+        display: none;
+      }
+
+      i {
+        margin-right: $gutter-mini;
+      }
+
+      &.hover span {
+        text-decoration: underline;
+      }
+    }
+  }
+
   &-modal {
     display: flex;
     align-items: center;
     justify-content: center;
-  }
-
-  &-button {
-    display: flex;
-    align-items: center;
-    font-size: 16px;
-
-    i {
-      font-size: 20px;
-      margin-right: $gutter/2;
-      @include color(opp);
-    }
-
-    @include hoverActive {
-      .ImportAndExport-buttonText {
-        text-decoration: underline;
-      }
-    }
   }
 
   .Modal-container {
