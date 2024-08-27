@@ -134,7 +134,7 @@ export function ImportAndExport({ systemId, isNew, isSaved, handleSave, onSetToa
   return (
     <div className="ImportAndExport">
       <button className="ImportAndExport-openButton"
-              data-tooltip-content="Import or export system data"
+              data-tooltip-content="Download system data"
               onClick={() => setIsModalOpen(true)}>
         <i className="fas fa-download"></i>
       </button>
@@ -155,7 +155,7 @@ export function ImportAndExport({ systemId, isNew, isSaved, handleSave, onSetToa
       <Modal 
         baseClass='ImportAndExport'
         open={isModalOpen}
-        heading={<div className="ImportAndExport-heading">Import and Export</div>}
+        heading={<div className="ImportAndExport-heading">Export Options</div>}
         content={renderModalContent()}
         onClose={() => setIsModalOpen(false)}
       />
