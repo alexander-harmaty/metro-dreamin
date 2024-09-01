@@ -508,7 +508,8 @@ export function System({ownerDocData = {},
                 isNew={isNew}
                 isSaved={isSaved}
                 handleSave={handleSave}
-                onSetToast={handleSetToast} />
+                onSetToast={handleSetToast}
+                viewOnly={viewOnly} />
                         
         <Share systemDocData={systemDocData}
                handleSetToast={handleSetToast} />
