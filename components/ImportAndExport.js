@@ -33,46 +33,42 @@ export function ImportAndExport({ systemId, isNew, isSaved, handleSave, onSetToa
   const handleFileUpload = (event) => {
     const files = event.target.files;
     const updatedFiles = [...uploadedFiles];
-
+  
     for (let file of files) {
       updatedFiles.push({
         name: file.name,
-        progress: 0,
-        status: 'uploading',
-        id: Math.random().toString(36).substr(2, 9)  // Generate a random ID for each file
+        id: Math.random().toString(36).substr(2, 9)  // Generate a unique ID for each file
       });
     }
-
+  
     setUploadedFiles(updatedFiles);
-  };
+  };  
 
   const handleFileRemove = (fileId) => {
     setUploadedFiles(uploadedFiles.filter(file => file.id !== fileId));
   };
 
-  const handleImport = () => {
-    console.log('Importing the file:', importFile);
+  const handleDrop = (event) => {
+    event.preventDefault();
+    const files = event.dataTransfer.files;
+    const updatedFiles = [...uploadedFiles];
+
+    for (let file of files) {
+      if (file.type === "application/json") {
+        updatedFiles.push({
+          name: file.name,
+          progress: 100,  // Initially set to 100% for simplicity
+          status: 'completed',
+          id: Math.random().toString(36).substr(2, 9)
+        });
+      }
+    }
+
+    setUploadedFiles(updatedFiles);
   };
 
-  const renderUploadedFiles = () => {
-    return uploadedFiles.map(file => (
-      <div key={file.id} className="ImportAndExport-fileItem">
-        <div className="ImportAndExport-fileIcon">
-          <i className="fas fa-file-alt"></i>
-        </div>
-        <div className="ImportAndExport-fileDetails">
-          <div className="ImportAndExport-fileName">
-            {file.name} ({file.progress}%)
-          </div>
-          <div className="ImportAndExport-progressBar">
-            <div className="ImportAndExport-progress" style={{ width: `${file.progress}%` }}></div>
-          </div>
-        </div>
-        <div className="ImportAndExport-fileStatus">
-          {file.status === 'completed' ? 'Completed' : <button onClick={() => handleFileRemove(file.id)}>Cancel</button>}
-        </div>
-      </div>
-    ));
+  const handleDragOver = (event) => {
+    event.preventDefault();
   };
 
   const exportSystem = async (formatFn, fileType, fileExtension, mimeType) => {
@@ -126,11 +122,33 @@ export function ImportAndExport({ systemId, isNew, isSaved, handleSave, onSetToa
     setFileType(type);
   };
 
+  const renderUploadedFiles = () => {
+    return uploadedFiles.map(file => (
+      <div key={file.id} className="ImportAndExport-fileItem">
+        <div className="ImportAndExport-fileIcon">
+          <i className="fas fa-file-alt"></i>
+        </div>
+        <div className="ImportAndExport-fileDetails">
+          <div className="ImportAndExport-fileName">
+            {file.name}
+          </div>
+        </div>
+        <div className="ImportAndExport-fileStatus">
+          <button onClick={() => handleFileRemove(file.id)}>Delete</button>
+        </div>
+      </div>
+    ));
+  };
+
   const renderModalContent = () => (
     <div className="ImportAndExport-content">
       {firebaseContext.user && !isNew && (
         <div className="ImportAndExport-importSection">
-          <div className="ImportAndExport-uploadArea">
+          <div 
+            className="ImportAndExport-uploadArea"
+            onDrop={handleDrop}
+            onDragOver={handleDragOver}
+          >
             <input
               type="file"
               accept=".json"
@@ -141,7 +159,7 @@ export function ImportAndExport({ systemId, isNew, isSaved, handleSave, onSetToa
             <div className="ImportAndExport-dragBox">
               <div>Drag and drop files here</div>
               <div>- OR -</div>
-              <button>Browse Files</button>
+              <button onClick={() => document.querySelector('.ImportAndExport-fileInput').click()}>Browse Files</button>
             </div>
           </div>
           <div className="ImportAndExport-uploadedFiles">
