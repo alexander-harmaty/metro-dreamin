@@ -141,91 +141,91 @@ export function ImportAndExport({ systemId, isNew, isSaved, handleSave, onSetToa
   };
 
   const renderModalContent = () => (
-    <div className="ImportAndExport-content">
-      {firebaseContext.user && !isNew && (
-        <div className="ImportAndExport-importSection">
-          <div 
-            className="ImportAndExport-uploadArea"
-            onDrop={handleDrop}
-            onDragOver={handleDragOver}
-          >
-            <input
-              type="file"
-              accept=".json"
-              multiple
-              onChange={handleFileUpload}
-              className="ImportAndExport-fileInput"
-            />
-            <div className="ImportAndExport-dragBox">
-              <div>Drag and drop files here</div>
-              <div>- OR -</div>
-              <button onClick={() => document.querySelector('.ImportAndExport-fileInput').click()}>Browse Files</button>
-            </div>
-          </div>
-          <div className="ImportAndExport-uploadedFiles">
-            {renderUploadedFiles()}
-          </div>
-          <div className="ImportAndExport-buttonWrap">
-            <button className="ImportAndExport-importButton Button--primary">Import</button>
+  <div className="ImportAndExport-content">
+    {firebaseContext.user && !isNew && (
+      <div className="ImportAndExport-importSection">
+        <div 
+          className="ImportAndExport-uploadArea"
+          onDrop={handleDrop}
+          onDragOver={handleDragOver}
+        >
+          <input
+            type="file"
+            accept=".json"
+            multiple
+            onChange={handleFileUpload}
+            className="ImportAndExport-fileInput"
+          />
+          <div className="ImportAndExport-dragBox">
+            <div>Drag and drop files here</div>
+            <div>- OR -</div>
+            <button onClick={() => document.querySelector('.ImportAndExport-fileInput').click()}>Browse Files</button>
           </div>
         </div>
-      )}
-
-      {/* Conditionally render the divider line */}
-      {!viewOnly && <hr className="ImportAndExport-divider" />}
-
-      {/* Export Section */}
-      <div className="ImportAndExport-exportSection">
-        <label className="ImportAndExport-label">Filename and Format</label>
-        <div className="ImportAndExport-inputWrap">
-          <form className="ImportAndExport-inputForm">
-            <input
-              className="ImportAndExport-filenameInput"
-              value={fileName}
-              placeholder="Enter a filename..."
-              onChange={(e) => setFileName(e.target.value)}
-            />
-            <i className="fas fa-pen ImportAndExport-penIcon"></i>
-          </form>
-          <div className="ImportAndExport-fileType">
-            <label
-              data-tooltip-content="For use in MetroDreamin', and a diverse range of applications."
-              onMouseEnter={(e) => e.currentTarget.classList.add('hover')}
-              onMouseLeave={(e) => e.currentTarget.classList.remove('hover')}
-              onClick={() => handleFileTypeChange('json')}
-            >
-              <input
-                type="radio"
-                value="json"
-                checked={fileType === 'json'}
-                onChange={() => {}}
-              />
-              <i className={fileType === 'json' ? 'fa-solid fa-circle-dot' : 'fa-regular fa-circle'}></i> <span>JSON</span>
-            </label>
-            <label
-              data-tooltip-content="For use in map browsers, like Google Earth. (Large systems may be too big for Google My Maps)"
-              onMouseEnter={(e) => e.currentTarget.classList.add('hover')}
-              onMouseLeave={(e) => e.currentTarget.classList.remove('hover')}
-              onClick={() => handleFileTypeChange('kml')}
-            >
-              <input
-                type="radio"
-                value="kml"
-                checked={fileType === 'kml'}
-                onChange={() => {}}
-              />
-              <i className={fileType === 'kml' ? 'fa-solid fa-circle-dot' : 'fa-regular fa-circle'}></i> <span>KML</span>
-            </label>
-          </div>
+        <div className={`ImportAndExport-uploadedFiles ${uploadedFiles.length > 0 ? 'ImportAndExport-uploadedFiles--visible' : ''}`}>
+          {renderUploadedFiles()}
         </div>
         <div className="ImportAndExport-buttonWrap">
-          <button className="ImportAndExport-exportButton Button--primary" onClick={handleExport}>
-            Export
-          </button>
+          <button className="ImportAndExport-importButton Button--primary">Import</button>
         </div>
       </div>
+    )}
+
+    {/* Conditionally render the divider line */}
+    {!viewOnly && <hr className="ImportAndExport-divider" />}
+
+    {/* Export Section */}
+    <div className="ImportAndExport-exportSection">
+      <label className="ImportAndExport-label">Filename and Format</label>
+      <div className="ImportAndExport-inputWrap">
+        <form className="ImportAndExport-inputForm">
+          <input
+            className="ImportAndExport-filenameInput"
+            value={fileName}
+            placeholder="Enter a filename..."
+            onChange={(e) => setFileName(e.target.value)}
+          />
+          <i className="fas fa-pen ImportAndExport-penIcon"></i>
+        </form>
+        <div className="ImportAndExport-fileType">
+          <label
+            data-tooltip-content="For use in MetroDreamin', and a diverse range of applications."
+            onMouseEnter={(e) => e.currentTarget.classList.add('hover')}
+            onMouseLeave={(e) => e.currentTarget.classList.remove('hover')}
+            onClick={() => handleFileTypeChange('json')}
+          >
+            <input
+              type="radio"
+              value="json"
+              checked={fileType === 'json'}
+              onChange={() => {}}
+            />
+            <i className={fileType === 'json' ? 'fa-solid fa-circle-dot' : 'fa-regular fa-circle'}></i> <span>JSON</span>
+          </label>
+          <label
+            data-tooltip-content="For use in map browsers, like Google Earth. (Large systems may be too big for Google My Maps)"
+            onMouseEnter={(e) => e.currentTarget.classList.add('hover')}
+            onMouseLeave={(e) => e.currentTarget.classList.remove('hover')}
+            onClick={() => handleFileTypeChange('kml')}
+          >
+            <input
+              type="radio"
+              value="kml"
+              checked={fileType === 'kml'}
+              onChange={() => {}}
+            />
+            <i className={fileType === 'kml' ? 'fa-solid fa-circle-dot' : 'fa-regular fa-circle'}></i> <span>KML</span>
+          </label>
+        </div>
+      </div>
+      <div className="ImportAndExport-buttonWrap">
+        <button className="ImportAndExport-exportButton Button--primary" onClick={handleExport}>
+          Export
+        </button>
+      </div>
     </div>
-  );
+  </div>
+);
 
   return (
     <div className="ImportAndExport">
