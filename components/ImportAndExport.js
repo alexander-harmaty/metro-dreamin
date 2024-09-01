@@ -16,6 +16,8 @@ export function ImportAndExport({ systemId, isNew, isSaved, handleSave, onSetToa
   const [fileType, setFileType] = useState('json');
   const [importFile, setImportFile] = useState(null);
   const [uploadedFiles, setUploadedFiles] = useState([]);
+  const [modalState, setModalState] = useState('ImportAndExport');
+  const [fadeClass, setFadeClass] = useState('fade-in');
 
   useEffect(() => {
     async function fetchSystemData() {
@@ -57,8 +59,6 @@ export function ImportAndExport({ systemId, isNew, isSaved, handleSave, onSetToa
       if (file.type === "application/json") {
         updatedFiles.push({
           name: file.name,
-          progress: 100,  // Initially set to 100% for simplicity
-          status: 'completed',
           id: Math.random().toString(36).substr(2, 9)
         });
       }
@@ -69,6 +69,59 @@ export function ImportAndExport({ systemId, isNew, isSaved, handleSave, onSetToa
 
   const handleDragOver = (event) => {
     event.preventDefault();
+  };
+
+  const switchModalContent = (newState) => {
+    setFadeClass('fade-out');
+    setTimeout(() => {
+      setModalState(newState);
+      setFadeClass('fade-in');
+    }, 300); // Keep the timeout duration aligned with the fade transition duration
+  };  
+
+  const handleImport = () => {
+    // Trigger the modal state change to "Select lines from file"
+    setModalState('selectLines');
+    // Here you would normally parse the files and update the lines to be displayed
+  };
+
+  const handleBack = () => {
+    setModalState('importExport'); // Go back to the import/export state
+  };
+
+  const renderUploadedFiles = () => {
+    return uploadedFiles.map(file => (
+      <div key={file.id} className="ImportAndExport-fileItem">
+        <div className="ImportAndExport-fileIcon">
+          <i className="fas fa-file-alt"></i>
+        </div>
+        <div className="ImportAndExport-fileDetails">
+          <div className="ImportAndExport-fileName">
+            {file.name}
+          </div>
+        </div>
+        <div className="ImportAndExport-fileStatus">
+          <button onClick={() => handleFileRemove(file.id)}>Delete</button>
+        </div>
+      </div>
+    ));
+  };
+
+  const renderLineSelection = () => {
+    return (
+      <div className="ImportAndExport-content">
+        <div className="ImportAndExport-lineSelection">
+          {/* Replace this with actual line and lineGroup rendering based on the uploaded files */}
+          <p>Line 1</p>
+          <p>Line 2</p>
+          {/* Dummy buttons for now */}
+        </div>
+        <div className="ImportAndExport-buttonWrap">
+          <button className="Button--primary" onClick={handleBack}>Back</button>
+          <button className="Button--primary" style={{ marginLeft: 'auto' }}>Add selection</button>
+        </div>
+      </div>
+    );
   };
 
   const exportSystem = async (formatFn, fileType, fileExtension, mimeType) => {
@@ -122,111 +175,119 @@ export function ImportAndExport({ systemId, isNew, isSaved, handleSave, onSetToa
     setFileType(type);
   };
 
-  const renderUploadedFiles = () => {
-    return uploadedFiles.map(file => (
-      <div key={file.id} className="ImportAndExport-fileItem">
-        <div className="ImportAndExport-fileIcon">
-          <i className="fas fa-file-alt"></i>
-        </div>
-        <div className="ImportAndExport-fileDetails">
-          <div className="ImportAndExport-fileName">
-            {file.name}
+  const renderModalContent = () => {
+    if (modalState === 'ImportAndExport') {
+      return (
+        <div className={`ImportAndExport-content ${fadeClass}`}>
+          {firebaseContext.user && !isNew && (
+            <div className="ImportAndExport-importSection">
+              <div 
+                className="ImportAndExport-uploadArea"
+                onDrop={handleDrop}
+                onDragOver={handleDragOver}
+              >
+                <input
+                  type="file"
+                  accept=".json"
+                  multiple
+                  onChange={handleFileUpload}
+                  className="ImportAndExport-fileInput"
+                />
+                <div className="ImportAndExport-dragBox">
+                  <div>Drag and drop files here</div>
+                  <div>- OR -</div>
+                  <button onClick={() => document.querySelector('.ImportAndExport-fileInput').click()}>Browse Files</button>
+                </div>
+              </div>
+              <div className={`ImportAndExport-uploadedFiles ${uploadedFiles.length > 0 ? 'ImportAndExport-uploadedFiles--visible' : ''}`}>
+                {renderUploadedFiles()}
+              </div>
+              <div className="ImportAndExport-buttonWrap">
+                <button 
+                  className="ImportAndExport-importButton Button--primary"
+                  onClick={() => switchModalContent('SelectLines')}
+                >
+                  Import
+                </button>
+              </div>
+            </div>
+          )}
+  
+          {!viewOnly && <hr className="ImportAndExport-divider" />}
+  
+          <div className="ImportAndExport-exportSection">
+            <label className="ImportAndExport-label">Filename and Format</label>
+            <div className="ImportAndExport-inputWrap">
+              <form className="ImportAndExport-inputForm">
+                <input
+                  className="ImportAndExport-filenameInput"
+                  value={fileName}
+                  placeholder="Enter a filename..."
+                  onChange={(e) => setFileName(e.target.value)}
+                />
+                <i className="fas fa-pen ImportAndExport-penIcon"></i>
+              </form>
+              <div className="ImportAndExport-fileType">
+                <label
+                  data-tooltip-content="For use in MetroDreamin', and a diverse range of applications."
+                  onMouseEnter={(e) => e.currentTarget.classList.add('hover')}
+                  onMouseLeave={(e) => e.currentTarget.classList.remove('hover')}
+                  onClick={() => handleFileTypeChange('json')}
+                >
+                  <input
+                    type="radio"
+                    value="json"
+                    checked={fileType === 'json'}
+                    onChange={() => {}}
+                  />
+                  <i className={fileType === 'json' ? 'fa-solid fa-circle-dot' : 'fa-regular fa-circle'}></i> <span>JSON</span>
+                </label>
+                <label
+                  data-tooltip-content="For use in map browsers, like Google Earth. (Large systems may be too big for Google My Maps)"
+                  onMouseEnter={(e) => e.currentTarget.classList.add('hover')}
+                  onMouseLeave={(e) => e.currentTarget.classList.remove('hover')}
+                  onClick={() => handleFileTypeChange('kml')}
+                >
+                  <input
+                    type="radio"
+                    value="kml"
+                    checked={fileType === 'kml'}
+                    onChange={() => {}}
+                  />
+                  <i className={fileType === 'kml' ? 'fa-solid fa-circle-dot' : 'fa-regular fa-circle'}></i> <span>KML</span>
+                </label>
+              </div>
+            </div>
+            <div className="ImportAndExport-buttonWrap">
+              <button className="ImportAndExport-exportButton Button--primary" onClick={handleExport}>
+                Export
+              </button>
+            </div>
           </div>
         </div>
-        <div className="ImportAndExport-fileStatus">
-          <button onClick={() => handleFileRemove(file.id)}>Delete</button>
-        </div>
-      </div>
-    ));
-  };
-
-  const renderModalContent = () => (
-  <div className="ImportAndExport-content">
-    {firebaseContext.user && !isNew && (
-      <div className="ImportAndExport-importSection">
-        <div 
-          className="ImportAndExport-uploadArea"
-          onDrop={handleDrop}
-          onDragOver={handleDragOver}
-        >
-          <input
-            type="file"
-            accept=".json"
-            multiple
-            onChange={handleFileUpload}
-            className="ImportAndExport-fileInput"
-          />
-          <div className="ImportAndExport-dragBox">
-            <div>Drag and drop files here</div>
-            <div>- OR -</div>
-            <button onClick={() => document.querySelector('.ImportAndExport-fileInput').click()}>Browse Files</button>
+      );
+    } else if (modalState === 'SelectLines') {
+      return (
+        <div className={`ImportAndExport-content ${fadeClass}`}>
+          <div className="ImportAndExport-lineSelection">
+            {/* Add line selection content here */}
+          </div>
+          <div className="ImportAndExport-buttonWrap ImportAndExport-nextPage">
+            <button 
+              className="ImportAndExport-backButton" 
+              onClick={() => switchModalContent('ImportAndExport')}
+            >
+              Back
+            </button>
+            <button className="ImportAndExport-addSelectionButton">
+              Add Selection
+            </button>
           </div>
         </div>
-        <div className={`ImportAndExport-uploadedFiles ${uploadedFiles.length > 0 ? 'ImportAndExport-uploadedFiles--visible' : ''}`}>
-          {renderUploadedFiles()}
-        </div>
-        <div className="ImportAndExport-buttonWrap">
-          <button className="ImportAndExport-importButton Button--primary">Import</button>
-        </div>
-      </div>
-    )}
-
-    {/* Conditionally render the divider line */}
-    {!viewOnly && <hr className="ImportAndExport-divider" />}
-
-    {/* Export Section */}
-    <div className="ImportAndExport-exportSection">
-      <label className="ImportAndExport-label">Filename and Format</label>
-      <div className="ImportAndExport-inputWrap">
-        <form className="ImportAndExport-inputForm">
-          <input
-            className="ImportAndExport-filenameInput"
-            value={fileName}
-            placeholder="Enter a filename..."
-            onChange={(e) => setFileName(e.target.value)}
-          />
-          <i className="fas fa-pen ImportAndExport-penIcon"></i>
-        </form>
-        <div className="ImportAndExport-fileType">
-          <label
-            data-tooltip-content="For use in MetroDreamin', and a diverse range of applications."
-            onMouseEnter={(e) => e.currentTarget.classList.add('hover')}
-            onMouseLeave={(e) => e.currentTarget.classList.remove('hover')}
-            onClick={() => handleFileTypeChange('json')}
-          >
-            <input
-              type="radio"
-              value="json"
-              checked={fileType === 'json'}
-              onChange={() => {}}
-            />
-            <i className={fileType === 'json' ? 'fa-solid fa-circle-dot' : 'fa-regular fa-circle'}></i> <span>JSON</span>
-          </label>
-          <label
-            data-tooltip-content="For use in map browsers, like Google Earth. (Large systems may be too big for Google My Maps)"
-            onMouseEnter={(e) => e.currentTarget.classList.add('hover')}
-            onMouseLeave={(e) => e.currentTarget.classList.remove('hover')}
-            onClick={() => handleFileTypeChange('kml')}
-          >
-            <input
-              type="radio"
-              value="kml"
-              checked={fileType === 'kml'}
-              onChange={() => {}}
-            />
-            <i className={fileType === 'kml' ? 'fa-solid fa-circle-dot' : 'fa-regular fa-circle'}></i> <span>KML</span>
-          </label>
-        </div>
-      </div>
-      <div className="ImportAndExport-buttonWrap">
-        <button className="ImportAndExport-exportButton Button--primary" onClick={handleExport}>
-          Export
-        </button>
-      </div>
-    </div>
-  </div>
-);
-
+      );
+    }
+  };  
+  
   return (
     <div className="ImportAndExport">
       <button className="ImportAndExport-openButton"
@@ -234,7 +295,7 @@ export function ImportAndExport({ systemId, isNew, isSaved, handleSave, onSetToa
               onClick={() => setIsModalOpen(true)}>
         <i className="fas fa-download"></i>
       </button>
-
+  
       {renderFadeWrap(
         prompt && (
           <Prompt
@@ -247,11 +308,11 @@ export function ImportAndExport({ systemId, isNew, isSaved, handleSave, onSetToa
         ),
         'prompt'
       )}
-
+  
       <Modal 
         baseClass='ImportAndExport'
         open={isModalOpen}
-        heading={<div className="ImportAndExport-heading">Import and Export</div>}
+        heading={<div className="ImportAndExport-heading">{modalState === 'ImportAndExport' ? 'Import and Export' : 'Select lines from file'}</div>}
         content={renderModalContent()}
         onClose={() => setIsModalOpen(false)}
       />
