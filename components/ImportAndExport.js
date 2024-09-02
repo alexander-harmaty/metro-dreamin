@@ -79,14 +79,15 @@ export function ImportAndExport({ systemId, isNew, isSaved, handleSave, onSetToa
     }, 300); // Keep the timeout duration aligned with the fade transition duration
   };  
 
-  const handleImport = () => {
+  const handleImportButton = () => {
+    // Parse the file contents into objects
+
     // Trigger the modal state change to "Select lines from file"
-    setModalState('selectLines');
-    // Here you would normally parse the files and update the lines to be displayed
+    switchModalContent('SelectLines');
   };
 
-  const handleBack = () => {
-    setModalState('importExport'); // Go back to the import/export state
+  const handleBackButton = () => {
+    switchModalContent('ImportAndExport');
   };
 
   const renderUploadedFiles = () => {
@@ -117,7 +118,7 @@ export function ImportAndExport({ systemId, isNew, isSaved, handleSave, onSetToa
           {/* Dummy buttons for now */}
         </div>
         <div className="ImportAndExport-buttonWrap">
-          <button className="Button--primary" onClick={handleBack}>Back</button>
+          <button className="Button--primary" onClick={handleBackButton}>Back</button>
           <button className="Button--primary" style={{ marginLeft: 'auto' }}>Add selection</button>
         </div>
       </div>
@@ -205,7 +206,7 @@ export function ImportAndExport({ systemId, isNew, isSaved, handleSave, onSetToa
               <div className="ImportAndExport-buttonWrap">
                 <button 
                   className="ImportAndExport-importButton Button--primary"
-                  onClick={() => switchModalContent('SelectLines')}
+                  onClick={handleImportButton}
                 >
                   Import
                 </button>
@@ -275,7 +276,7 @@ export function ImportAndExport({ systemId, isNew, isSaved, handleSave, onSetToa
           <div className="ImportAndExport-buttonWrap ImportAndExport-nextPage">
             <button 
               className="ImportAndExport-backButton" 
-              onClick={() => switchModalContent('ImportAndExport')}
+              onClick={handleBackButton}
             >
               Back
             </button>
