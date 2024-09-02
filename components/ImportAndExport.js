@@ -18,6 +18,7 @@ export function ImportAndExport({ systemId, isNew, isSaved, handleSave, onSetToa
   const [uploadedFiles, setUploadedFiles] = useState([]);
   const [modalState, setModalState] = useState('ImportAndExport');
   const [fadeClass, setFadeClass] = useState('fade-in');
+  const [parsedSystems, setParsedSystems] = useState([]);
 
   useEffect(() => {
     async function fetchSystemData() {
@@ -39,12 +40,13 @@ export function ImportAndExport({ systemId, isNew, isSaved, handleSave, onSetToa
     for (let file of files) {
       updatedFiles.push({
         name: file.name,
-        id: Math.random().toString(36).substr(2, 9)  // Generate a unique ID for each file
+        id: Math.random().toString(36).substr(2, 9),  // Generate a unique ID for each file
+        fileObject: file  // Store the actual file object
       });
     }
   
     setUploadedFiles(updatedFiles);
-  };  
+  };   
 
   const handleFileRemove = (fileId) => {
     setUploadedFiles(uploadedFiles.filter(file => file.id !== fileId));
@@ -79,14 +81,33 @@ export function ImportAndExport({ systemId, isNew, isSaved, handleSave, onSetToa
     }, 300); // Keep the timeout duration aligned with the fade transition duration
   };  
 
-  const handleImportButton = () => {
-    // Parse the file contents into objects
-
+  const handleImport = async () => {
+    const systems = await Promise.all(uploadedFiles.map(async (file) => {
+      if (file.fileObject && typeof file.fileObject.text === 'function') {
+        const content = await file.fileObject.text();
+        try {
+          const parsedSystem = JSON.parse(content);
+          return {
+            ...parsedSystem,
+            fileName: file.name,  // Optionally store the filename in the system object
+          };
+        } catch (error) {
+          console.error('Error parsing JSON file:', file.name, error);
+          return null;
+        }
+      } else {
+        console.error('File object is not valid:', file);
+        return null;
+      }
+    }));
+  
+    // Further processing of the systems array
+    console.log(systems);
     // Trigger the modal state change to "Select lines from file"
     switchModalContent('SelectLines');
-  };
+  };  
 
-  const handleBackButton = () => {
+  const handleBack = () => {
     switchModalContent('ImportAndExport');
   };
 
@@ -118,7 +139,7 @@ export function ImportAndExport({ systemId, isNew, isSaved, handleSave, onSetToa
           {/* Dummy buttons for now */}
         </div>
         <div className="ImportAndExport-buttonWrap">
-          <button className="Button--primary" onClick={handleBackButton}>Back</button>
+          <button className="Button--primary" onClick={handleBack}>Back</button>
           <button className="Button--primary" style={{ marginLeft: 'auto' }}>Add selection</button>
         </div>
       </div>
@@ -206,7 +227,7 @@ export function ImportAndExport({ systemId, isNew, isSaved, handleSave, onSetToa
               <div className="ImportAndExport-buttonWrap">
                 <button 
                   className="ImportAndExport-importButton Button--primary"
-                  onClick={handleImportButton}
+                  onClick={handleImport}
                 >
                   Import
                 </button>
@@ -271,12 +292,26 @@ export function ImportAndExport({ systemId, isNew, isSaved, handleSave, onSetToa
       return (
         <div className={`ImportAndExport-content ${fadeClass}`}>
           <div className="ImportAndExport-lineSelection">
-            {/* Add line selection content here */}
+            {parsedSystems.map((system, index) => (
+              <div key={index}>
+                <h3>{system.title}</h3>
+                <LineButtons
+                  system={system.map}
+                  viewOnly={false}
+                  onLineClick={(lineId) => {
+                    // Handle line selection logic
+                    // Perhaps storing selected lines in state
+                  }}
+                  onAddLineGroup={() => {}}
+                  onAddLine={() => {}}
+                />
+              </div>
+            ))}
           </div>
           <div className="ImportAndExport-buttonWrap ImportAndExport-nextPage">
             <button 
               className="ImportAndExport-backButton" 
-              onClick={handleBackButton}
+              onClick={handleBack}
             >
               Back
             </button>
@@ -318,7 +353,7 @@ export function ImportAndExport({ systemId, isNew, isSaved, handleSave, onSetToa
         onClose={() => setIsModalOpen(false)}
       />
     </div>
-  );
+  );  
 }
 
 function serializeToJSON(system) {
